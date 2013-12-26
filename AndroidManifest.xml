@@ -44,6 +44,7 @@
     <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES"/>
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/>
     <uses-permission android:name="android.permission.BATTERY_STATS"/>
+    <uses-permission android:name="android.permission.RESET_BATTERY_STATS"/>
     <uses-permission android:name="com.android.launcher.permission.READ_SETTINGS" />
     <uses-permission android:name="com.android.launcher.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.MOVE_PACKAGE" />
@@ -734,19 +735,41 @@
                 android:resource="@id/about_settings" />
         </activity>
 
+        <activity android:name=".extras.PartitionInfo"
+                android:theme="@android:style/Theme.Holo.DialogWhenLarge"
+                android:label="@string/partition_info_title" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.VOICE_LAUNCH" />
+            </intent-filter>
+        </activity>
+
         <activity android:name="SettingsLicenseActivity"
                 android:label="@string/settings_license_activity_title"
                 android:theme="@android:style/Theme.Holo.Panel"
-                android:configChanges="orientation|screenSize">
+                android:configChanges="orientation|screenSize"
+                android:parentActivityName="Settings$DeviceInfoSettingsActivity">
             <intent-filter>
                 <action android:name="android.settings.LICENSE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
+        <activity android:name="SettingsCMLicenseActivity"
+                android:label="@string/settings_cmlicense_activity_title"
+                android:theme="@android:style/Theme.Holo.Panel"
+                android:configChanges="orientation|screenSize">
+            <intent-filter>
+                <action android:name="android.settings.CMLICENSE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity android:name="SettingsSafetyLegalActivity"
                 android:label="@string/settings_safetylegal_activity_title"
-                android:theme="@*android:style/Theme.Holo.Dialog.Alert">
+                android:theme="@*android:style/Theme.Holo.Dialog.Alert"
+                android:parentActivityName="Settings$DeviceInfoSettingsActivity">
             <intent-filter>
                 <action android:name="android.settings.SAFETY" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -1150,22 +1173,19 @@
             android:excludeFromRecents="true"
         />
 
+        <activity android:name="ChooseLockPatternSize" android:exported="false"/>
+
         <activity android:name="ChooseLockPattern" android:exported="false"/>
 
         <activity android:name="ChooseLockPassword" android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize"/>
 
-        <service android:label="ReportingService"
-            android:enabled="true"
-            android:exported="false"
-            android:name=".cmstats.ReportingService">
-        </service>
-
         <!-- Runs in the phone process since it needs access to the Phone object -->
         <activity android:name=".deviceinfo.Status"
                 android:label="@string/device_status_activity_title"
                 android:theme="@android:style/Theme.Holo.DialogWhenLarge"
-                android:process="com.android.phone">
+                android:process="com.android.phone"
+                android:parentActivityName="Settings$DeviceInfoSettingsActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -1398,6 +1418,7 @@
             <intent-filter>
                 <action android:name="android.bluetooth.device.action.PAIRING_REQUEST" />
                 <action android:name="android.bluetooth.device.action.PAIRING_CANCEL" />
+                <action android:name="android.bluetooth.device.action.BOND_STATE_CHANGED" />
             </intent-filter>
         </receiver>
 
@@ -1446,7 +1467,6 @@
         </activity>
 
         <activity android:name="Settings$WifiDisplaySettingsActivity"
-                android:uiOptions="splitActionBarWhenNarrow"
                 android:label="@string/wifi_display_settings_title"
                 android:taskAffinity=""
                 android:excludeFromRecents="true">
@@ -1650,7 +1670,8 @@
         <activity android:name="com.android.settings.accounts.ChooseAccountActivity"
             android:label="@string/header_add_an_account"
             android:configChanges="orientation|keyboardHidden|screenSize"
-            android:theme="@android:style/Theme.Holo.DialogWhenLarge"/>
+            android:theme="@android:style/Theme.Holo.DialogWhenLarge"
+            android:parentActivityName="Settings"/>
 
         <activity android:name=".CryptKeeper"
                   android:immersive="true"
@@ -1679,7 +1700,19 @@
         />
 
         <!-- CyanogenMod activities Start -->
-        <activity android:name=".cyanogenmod.SystemUiSettings"/>
+        <activity android:name="Settings$SystemSettingsActivity"
+                android:label="@string/system_settings_title"
+                android:taskAffinity=""
+                android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.cyanogenmod.SystemUiSettings" />
+            <meta-data android:name="com.android.settings.TOP_LEVEL_HEADER_ID"
+                android:resource="@id/system_settings" />
+        </activity>
 
         <activity android:name=".cyanogenmod.AutoBrightnessSetup"
                 android:excludeFromRecents="true"
@@ -1725,7 +1758,8 @@
 
         <activity android:name=".profiles.WifiTriggers" />
 
-        <activity android:name=".profiles.NFCProfileWriter" />
+        <activity android:name=".profiles.NFCProfileWriter"
+                android:parentActivityName="Settings$ProfilesSettingsActivity" />
 
         <activity android:name=".profiles.NFCProfileSelect" />
 
@@ -1744,19 +1778,7 @@
 
         <activity android:name=".ApnEditor" />
 
-        <activity android:name="Settings$AnonymousStatsActivity"
-                android:label="@string/anonymous_statistics_title"
-                android:configChanges="orientation|keyboardHidden|screenSize"
-                android:clearTaskOnLaunch="true">
-            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
-                android:value="com.android.settings.cmstats.AnonymousStats" />
-        </activity>
-
-        <activity android:name=".cyanogenmod.ChangeLog" android:label="@string/changelog_title">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-            </intent-filter>
-        </activity>
+        <activity android:name=".cyanogenmod.ChangeLog" />
 
         <activity android:name=".cyanogenmod.LockscreenInterface" />
 
@@ -1791,7 +1813,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <action android:name="android.app.action.START_ENCRYPTION" />
-                <category android:name="android.intent.category.DEFAULT" /> />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
                 android:value="com.android.settings.CryptKeeperSettings" />
@@ -1953,5 +1975,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Lto Service -->
+        <service android:label="LtoService"
+            android:enabled="true"
+            android:exported="false"
+            android:name=".cyanogenmod.LtoService">
+        </service>
+
     </application>
 </manifest>
