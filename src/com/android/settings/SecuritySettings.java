@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Not a Contribution.
  * Copyright (C) 2007 The Android Open Source Project
  * Modifications Copyright (C) 2012-2013 CyanogenMod
  *
@@ -43,10 +45,10 @@ import android.preference.PreferenceGroup;
 import android.preference.PreferenceScreen;
 import android.provider.Settings;
 import android.security.KeyStore;
+import android.telephony.MSimTelephonyManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
-import com.android.internal.telephony.util.BlacklistUtils;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settings.R;
 import com.android.settings.cyanogenmod.ButtonSettings;
@@ -81,6 +83,7 @@ public class SecuritySettings extends RestrictedSettingsFragment
 
     // Misc Settings
     private static final String KEY_SIM_LOCK = "sim_lock";
+    private static final String KEY_SIM_LOCK_SETTINGS = "sim_lock_settings";
     private static final String KEY_SHOW_PASSWORD = "show_password";
     private static final String KEY_CREDENTIAL_STORAGE_TYPE = "credential_storage_type";
     private static final String KEY_RESET_CREDENTIALS = "reset_credentials";
@@ -94,12 +97,9 @@ public class SecuritySettings extends RestrictedSettingsFragment
 
     // CyanogenMod Additions
     private static final String KEY_APP_SECURITY_CATEGORY = "app_security";
-    private static final String KEY_BLACKLIST = "blacklist";
     private static final String KEY_SMS_SECURITY_CHECK_PREF = "sms_security_check_limit";
     private static final String SLIDE_LOCK_TIMEOUT_DELAY = "slide_lock_timeout_delay";
     private static final String SLIDE_LOCK_SCREENOFF_DELAY = "slide_lock_screenoff_delay";
-    private static final String LOCKSCREEN_QUICK_UNLOCK_CONTROL = "quick_unlock_control";
-    private static final String CATEGORY_ADDITIONAL = "additional_options";
 
     private PackageManager mPM;
     private DevicePolicyManager mDPM;
@@ -129,7 +129,6 @@ public class SecuritySettings extends RestrictedSettingsFragment
     private boolean mIsPrimary;
 
     // CyanogenMod Additions
-    private PreferenceScreen mBlacklist;
     private ListPreference mSmsSecurityCheck;
     private ListPreference mSlideLockTimeoutDelay;
     private ListPreference mSlideLockScreenOffDelay;
@@ -263,49 +262,6 @@ public class SecuritySettings extends RestrictedSettingsFragment
             mPowerButtonInstantlyLocks = (CheckBoxPreference) root.findPreference(
                     KEY_POWER_INSTANTLY_LOCKS);
             checkPowerInstantLockDependency();
-
-            // Add the additional CyanogenMod settings
-            addPreferencesFromResource(R.xml.security_settings_cyanogenmod);
-
-            CheckBoxPreference quickUnlockScreen = (CheckBoxPreference)
-                    findPreference(Settings.System.LOCKSCREEN_QUICK_UNLOCK_CONTROL);
-            CheckBoxPreference menuUnlock = (CheckBoxPreference)
-                    findPreference(Settings.System.MENU_UNLOCK_SCREEN);
-            CheckBoxPreference homeUnlock = (CheckBoxPreference)
-                    findPreference(Settings.System.HOME_UNLOCK_SCREEN);
-            CheckBoxPreference vibratePref = (CheckBoxPreference)
-                    findPreference(Settings.System.LOCKSCREEN_VIBRATE_ENABLED);
-
-            final int deviceKeys = res.getInteger(
-                    com.android.internal.R.integer.config_deviceHardwareKeys);
-            final PreferenceGroup additionalPrefs =
-                    (PreferenceGroup) findPreference(CATEGORY_ADDITIONAL);
-
-            // hide all lock options if lock screen set to NONE
-            if (mLockPatternUtils.isLockScreenDisabled()) {
-                root.removePreference(additionalPrefs);
-            // hide the quick unlock and vibrate if using Pattern
-            } else if (mLockPatternUtils.isLockPatternEnabled()) {
-                additionalPrefs.removePreference(vibratePref);
-                additionalPrefs.removePreference(quickUnlockScreen);
-            // hide vibrate on unlock options if using PIN/password
-            // as primary lock screen or as backup to biometric
-            } else if (mLockPatternUtils.isLockPasswordEnabled()) {
-                additionalPrefs.removePreference(vibratePref);
-            // hide the quick unlock if its not using PIN/password
-            // as a primary lock screen or as a backup to biometric
-            } else {
-                additionalPrefs.removePreference(quickUnlockScreen);
-            }
-
-            // Hide the MenuUnlock setting if no menu button is available
-            if ((deviceKeys & ButtonSettings.KEY_MASK_MENU) == 0) {
-                additionalPrefs.removePreference(menuUnlock);
-            }
-            // Hide the HomeUnlock setting if no home button is available
-            if ((deviceKeys & ButtonSettings.KEY_MASK_HOME) == 0) {
-                additionalPrefs.removePreference(homeUnlock);
-            }
         }
 
         // biometric weak liveliness
@@ -343,23 +299,66 @@ public class SecuritySettings extends RestrictedSettingsFragment
         if (!isCmSecurity) {
             addPreferencesFromResource(R.xml.security_settings_misc);
 
-            // Do not display SIM lock for devices without an Icc card
-            TelephonyManager tm = TelephonyManager.getDefault();
-            if (!mIsPrimary || !tm.hasIccCard()) {
-                root.removePreference(root.findPreference(KEY_SIM_LOCK));
+            if (MSimTelephonyManager.getDefault().isMultiSimEnabled()) {
+                MSimTelephonyManager tm = MSimTelephonyManager.getDefault();
+                int numPhones = MSimTelephonyManager.getDefault().getPhoneCount();
+                boolean disableLock = true;
+                boolean removeLock = true;
+                for (int i = 0; i < numPhones; i++) {
+                    // Do not display SIM lock for devices without an Icc card
+                    if (tm.hasIccCard(i)) {
+                        // Disable SIM lock if sim card is missing or unknown
+                        removeLock = false;
+                        if (!((tm.getSimState(i) == TelephonyManager.SIM_STATE_ABSENT)
+                                || (tm.getSimState(i) == TelephonyManager.SIM_STATE_UNKNOWN)
+                                || (tm.getSimState(i) == TelephonyManager.SIM_STATE_CARD_IO_ERROR))) {
+                            disableLock = false;
+                        }
+                    }
+                }
+                if (removeLock) {
+                    root.removePreference(root.findPreference(KEY_SIM_LOCK));
+                } else {
+                    if (disableLock) {
+                        root.findPreference(KEY_SIM_LOCK).setEnabled(false);
+                    }
+                }
             } else {
-                // Disable SIM lock if sim card is missing or unknown
-                if ((TelephonyManager.getDefault().getSimState() ==
+                // Do not display SIM lock for devices without an Icc card
+                TelephonyManager tm = TelephonyManager.getDefault();
+                if (!mIsPrimary || !tm.hasIccCard()) {
+                    root.removePreference(root.findPreference(KEY_SIM_LOCK));
+                } else {
+                    // Disable SIM lock if sim card is missing or unknown
+                    if ((TelephonyManager.getDefault().getSimState() ==
                                      TelephonyManager.SIM_STATE_ABSENT) ||
-                    (TelephonyManager.getDefault().getSimState() ==
+                            (TelephonyManager.getDefault().getSimState() ==
                                      TelephonyManager.SIM_STATE_UNKNOWN)) {
-                    root.findPreference(KEY_SIM_LOCK).setEnabled(false);
+                        root.findPreference(KEY_SIM_LOCK).setEnabled(false);
+                    }
                 }
             }
 
             // Show password
             mShowPassword = (CheckBoxPreference) root.findPreference(KEY_SHOW_PASSWORD);
             mResetCredentials = root.findPreference(KEY_RESET_CREDENTIALS);
+
+            if (root.findPreference(KEY_SIM_LOCK) != null) {
+                // SIM/RUIM lock
+                Preference iccLock = (Preference) root.findPreference(KEY_SIM_LOCK_SETTINGS);
+
+                Intent intent = new Intent();
+                if (MSimTelephonyManager.getDefault().isMultiSimEnabled()) {
+                    intent.setClassName("com.android.settings",
+                            "com.android.settings.SelectSubscription");
+                    intent.putExtra(SelectSubscription.PACKAGE, "com.android.settings");
+                    intent.putExtra(SelectSubscription.TARGET_CLASS,
+                            "com.android.settings.IccLockSettings");
+                } else {
+                    intent.setClassName("com.android.settings", "com.android.settings.IccLockSettings");
+                }
+                iccLock.setIntent(intent);
+            }
 
             // Credential storage
             final UserManager um = (UserManager) getActivity().getSystemService(Context.USER_SERVICE);
@@ -405,7 +404,6 @@ public class SecuritySettings extends RestrictedSettingsFragment
 
             // App security settings
             addPreferencesFromResource(R.xml.security_settings_app_cyanogenmod);
-            mBlacklist = (PreferenceScreen) root.findPreference(KEY_BLACKLIST);
             mSmsSecurityCheck = (ListPreference) root.findPreference(KEY_SMS_SECURITY_CHECK_PREF);
             // Determine options based on device telephony support
             if (pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
@@ -417,15 +415,8 @@ public class SecuritySettings extends RestrictedSettingsFragment
                 // No telephony, remove dependent options
                 PreferenceGroup appCategory = (PreferenceGroup)
                         root.findPreference(KEY_APP_SECURITY_CATEGORY);
-                appCategory.removePreference(mBlacklist);
                 appCategory.removePreference(mSmsSecurityCheck);
-            }
-
-            // WhisperPush
-            // Only add if device has telephony support and has WhisperPush installed.
-            if (pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
-                    && isPackageInstalled("org.whispersystems.whisperpush")) {
-                addPreferencesFromResource(R.xml.security_settings_whisperpush);
+                root.removePreference(appCategory);
             }
         }
 
@@ -564,7 +555,9 @@ public class SecuritySettings extends RestrictedSettingsFragment
     }
 
     private void updateSmsSecuritySummary(int selection) {
-        String message = getString(R.string.sms_security_check_limit_summary, selection);
+        String message = selection > 0
+                ? getString(R.string.sms_security_check_limit_summary, selection)
+                : getString(R.string.sms_security_check_limit_summary_none);
         mSmsSecurityCheck.setSummary(message);
     }
 
@@ -676,8 +669,6 @@ public class SecuritySettings extends RestrictedSettingsFragment
         if (mResetCredentials != null) {
             mResetCredentials.setEnabled(!mKeyStore.isEmpty());
         }
-
-        updateBlacklistSummary();
     }
 
     @Override
@@ -821,13 +812,4 @@ public class SecuritySettings extends RestrictedSettingsFragment
         startActivity(intent);
     }
 
-    private void updateBlacklistSummary() {
-        if (mBlacklist != null) {
-            if (BlacklistUtils.isBlacklistEnabled(getActivity())) {
-                mBlacklist.setSummary(R.string.blacklist_summary);
-            } else {
-                mBlacklist.setSummary(R.string.blacklist_summary_disabled);
-            }
-        }
-    }
 }
