@@ -24,6 +24,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.app.admin.DevicePolicyManager;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -64,6 +65,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.android.internal.util.ArrayUtils;
+import com.android.settings.ActivityPicker;
 import com.android.settings.accessibility.AccessibilitySettings;
 import com.android.settings.accessibility.ToggleAccessibilityServicePreferenceFragment;
 import com.android.settings.accessibility.ToggleCaptioningPreferenceFragment;
@@ -91,6 +93,7 @@ import com.android.settings.inputmethod.SpellCheckersSettings;
 import com.android.settings.inputmethod.UserDictionaryList;
 import com.android.settings.location.LocationEnabler;
 import com.android.settings.location.LocationSettings;
+import com.android.settings.net.MobileDataEnabler;
 import com.android.settings.nfc.AndroidBeam;
 import com.android.settings.nfc.PaymentSettings;
 import com.android.settings.print.PrintJobSettingsFragment;
@@ -102,6 +105,7 @@ import com.android.settings.profiles.ProfileEnabler;
 import com.android.settings.profiles.ProfilesSettings;
 import com.android.settings.tts.TextToSpeechSettings;
 import com.android.settings.users.UserSettings;
+import com.android.settings.voicewakeup.VoiceWakeupEnabler;
 import com.android.settings.vpn2.VpnSettings;
 import com.android.settings.wfd.WifiDisplaySettings;
 import com.android.settings.wifi.AdvancedWifiSettings;
@@ -136,6 +140,8 @@ public class Settings extends PreferenceActivity
 
     private static final String SAVE_KEY_CURRENT_HEADER = "com.android.settings.CURRENT_HEADER";
     private static final String SAVE_KEY_PARENT_HEADER = "com.android.settings.PARENT_HEADER";
+
+    private static final String VOICE_WAKEUP_PACKAGE_NAME = "com.cyanogenmod.voicewakeup";
 
     static final int DIALOG_ONLY_ONE_HOME = 1;
 
@@ -598,6 +604,11 @@ public class Settings extends PreferenceActivity
                 if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH)) {
                     target.remove(i);
                 }
+            } else if (id == R.id.mobile_network_settings) {
+                // Remove mobile network settings if the device doesn't have telephony
+                if (Utils.isWifiOnly(this)) {
+                    target.remove(i);
+                }
             } else if (id == R.id.data_usage_settings) {
                 // Remove data usage when kernel module not enabled
                 final INetworkManagementService netManager = INetworkManagementService.Stub
@@ -663,6 +674,10 @@ public class Settings extends PreferenceActivity
             } else if (id == R.id.multi_sim_settings) {
                 if (!MSimTelephonyManager.getDefault().isMultiSimEnabled())
                     target.remove(header);
+            } else if (id == R.id.voice_wakeup_settings) {
+                if(!Utils.isPackageInstalled(this, VOICE_WAKEUP_PACKAGE_NAME)) {
+                    target.remove(header);
+                }
             }
 
             if (i < target.size() && target.get(i) == header
@@ -852,8 +867,10 @@ public class Settings extends PreferenceActivity
 
         private final WifiEnabler mWifiEnabler;
         private final BluetoothEnabler mBluetoothEnabler;
+        private final MobileDataEnabler mMobileDataEnabler;
         private final ProfileEnabler mProfileEnabler;
         private final LocationEnabler mLocationEnabler;
+        private final VoiceWakeupEnabler mVoiceWakeupEnabler;
         private AuthenticatorHelper mAuthHelper;
         private DevicePolicyManager mDevicePolicyManager;
 
@@ -873,7 +890,9 @@ public class Settings extends PreferenceActivity
                 return HEADER_TYPE_CATEGORY;
             } else if (header.id == R.id.wifi_settings
                     || header.id == R.id.bluetooth_settings
+                    || header.id == R.id.mobile_network_settings
                     || header.id == R.id.profiles_settings
+                    || header.id == R.id.voice_wakeup_settings
                     || header.id == R.id.location_settings) {
                 return HEADER_TYPE_SWITCH;
             } else if (header.id == R.id.security_settings) {
@@ -920,8 +939,10 @@ public class Settings extends PreferenceActivity
             // Switches inflated from their layouts. Must be done before adapter is set in super
             mWifiEnabler = new WifiEnabler(context, new Switch(context));
             mBluetoothEnabler = new BluetoothEnabler(context, new Switch(context));
+            mMobileDataEnabler = new MobileDataEnabler(context, new Switch(context));
             mProfileEnabler = new ProfileEnabler(context, new Switch(context));
             mLocationEnabler = new LocationEnabler(context, new Switch(context));
+            mVoiceWakeupEnabler = new VoiceWakeupEnabler(context, new Switch(context));
             mDevicePolicyManager = dpm;
         }
 
@@ -993,10 +1014,14 @@ public class Settings extends PreferenceActivity
                         mWifiEnabler.setSwitch(holder.switch_);
                     } else if (header.id == R.id.bluetooth_settings) {
                         mBluetoothEnabler.setSwitch(holder.switch_);
+                    } else if (header.id == R.id.mobile_network_settings) {
+                        mMobileDataEnabler.setSwitch(holder.switch_);
                     } else if (header.id == R.id.profiles_settings) {
                         mProfileEnabler.setSwitch(holder.switch_);
                     } else if (header.id == R.id.location_settings) {
                         mLocationEnabler.setSwitch(holder.switch_);
+                    } else if (header.id == R.id.voice_wakeup_settings) {
+                        mVoiceWakeupEnabler.setSwitch(holder.switch_);
                     }
                     updateCommonHeaderView(header, holder);
                     break;
@@ -1070,15 +1095,19 @@ public class Settings extends PreferenceActivity
         public void resume() {
             mWifiEnabler.resume();
             mBluetoothEnabler.resume();
+            mMobileDataEnabler.resume();
             mProfileEnabler.resume();
             mLocationEnabler.resume();
+            mVoiceWakeupEnabler.resume();
         }
 
         public void pause() {
             mWifiEnabler.pause();
             mBluetoothEnabler.pause();
+            mMobileDataEnabler.pause();
             mProfileEnabler.pause();
             mLocationEnabler.pause();
+            mVoiceWakeupEnabler.pause();
         }
     }
 
@@ -1087,6 +1116,19 @@ public class Settings extends PreferenceActivity
         boolean revert = false;
         if (header.id == R.id.account_add) {
             revert = true;
+        }
+
+        // a temp hack while we prepare to switch
+        // to the new theme chooser.
+        if (header.id == R.id.theme_settings) {
+            try {
+                Intent intent = new Intent();
+                intent.setClassName("com.tmobile.themechooser", "com.tmobile.themechooser.ThemeChooser");
+                startActivity(intent);
+                return;
+            } catch(ActivityNotFoundException e) {
+                 // Do nothing, we will launch the submenu
+            }
         }
 
         super.onHeaderClick(header, position);
@@ -1196,6 +1238,7 @@ public class Settings extends PreferenceActivity
     public static class AndroidBeamSettingsActivity extends Settings { /* empty */ }
     public static class WifiDisplaySettingsActivity extends Settings { /* empty */ }
     public static class ProfilesSettingsActivity extends Settings { /* empty */ }
+    public static class VoiceWakeupSettingsActivity extends Settings { /* empty */ }
     public static class DreamSettingsActivity extends Settings { /* empty */ }
     public static class NotificationStationActivity extends Settings { /* empty */ }
     public static class UserSettingsActivity extends Settings { /* empty */ }
